@@ -1,0 +1,7 @@
+slug: bridges-interop
+name: Puentes e interoperabilidad
+entities:
+  defillama: [layerzero-v2, across, stargate-v2, hyperliquid-bridge]
+  subreddits: [ethereum]
+  polymarket_tags: [layerzero, bridge]
+  tickers: [ZRO, ACX, STG]

@@ -316,6 +316,45 @@ volumen que el particionamiento maneje con comodidad.
 
 ---
 
+### ADR-011 — Monorepo TypeScript con worker de larga vida
+
+**Contexto.** El plano caliente necesita singleflight, semáforos por proveedor y
+un interruptor de circuito con memoria entre solicitudes. Todo eso es estado en
+proceso.
+
+**Decisión.** Monorepo pnpm en TypeScript sobre Node 22: `packages/core`
+(dominio puro, sin E/S), `packages/db` (esquema y repositorios),
+`packages/sources` (la única puerta de salida a la red) y dos aplicaciones,
+`apps/worker` y `apps/api`. El worker es un proceso de larga vida, no una
+función efímera.
+
+**Consecuencias.** Hay que operar un proceso propio en vez de apoyarse en
+funciones gestionadas. A cambio, las primitivas de concurrencia que exigen
+NFR-010 y NFR-011 significan algo: en un modelo sin estado entre invocaciones
+habría que coalescer contra la base y el mecanismo más importante del sistema
+sería el más frágil. Se revisa si el plano caliente deja de ser el cuello de
+botella.
+
+---
+
+### ADR-012 — Una sola puerta de salida a la red
+
+**Contexto.** La procedencia se pierde en el primer sitio donde alguien pueda
+llamar a una API sin persistir lo que recibe.
+
+**Decisión.** Todas las llamadas externas pasan por `SourceGateway`, que
+persiste el snapshot crudo —con hash y `fetched_at`— **antes** de parsearlo, y
+devuelve los fallos como valor de retorno en vez de lanzarlos. Los adaptadores
+nunca ven una respuesta HTTP.
+
+**Consecuencias.** Un adaptador no puede optimizar su propia llamada saltándose
+el gateway, y las credenciales que no deben persistirse (el token de Reddit)
+necesitan una ruta explícita fuera de él. A cambio, "transformar y descartar"
+deja de ser posible por construcción, y la degradación parcial es el camino
+normal del código en vez de una rama de error que alguien recuerde escribir.
+
+---
+
 ## 9. Deuda aceptada conscientemente
 
 Estas no son omisiones; son decisiones con fecha de revisión.
@@ -326,6 +365,8 @@ Estas no son omisiones; son decisiones con fecha de revisión.
 | Un solo Postgres (ADR-010) | Cuando el particionamiento deje de bastar |
 | Sin atribución nominal (ADR-009) | Cuando existan 15+ observaciones por actor |
 | Sin alertas push | Tras validar la métrica primaria del PRD |
+| Sin cobertura social hasta tener credenciales de Reddit | Al obtenerlas o al añadir una segunda fuente de atención |
+| Historial del autor desconocido en Reddit (peso conservador) | Cuando el coste de una llamada por autor esté justificado |
 | Dos cadenas | Tras validar que el cuadrante predice algo |
 
 ---

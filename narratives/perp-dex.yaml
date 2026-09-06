@@ -1,0 +1,7 @@
+slug: perp-dex
+name: Perpetuos en DEX
+entities:
+  defillama: [hyperliquid-perps, hyperliquid-hlp, gmx-v2-perps, dydx-v4, jupiter-perpetual-exchange]
+  subreddits: [defi]
+  polymarket_tags: [hyperliquid, perpetual]
+  tickers: [HYPE, GMX, DYDX]

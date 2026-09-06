@@ -1,0 +1,7 @@
+slug: solana-defi
+name: DeFi en Solana
+entities:
+  defillama: [raydium-amm, orca-dex, jupiter-lend, pumpswap, lifinity-v2]
+  subreddits: [solana]
+  polymarket_tags: [solana]
+  tickers: [SOL, RAY, ORCA, JUP]

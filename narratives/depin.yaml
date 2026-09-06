@@ -1,0 +1,10 @@
+slug: depin
+name: DePIN
+entities:
+  # DefiLlama no publica TVL para estos protocolos: responden vacío y la
+  # corrida lo declara como ausencia de dato en vez de fingir un cero. El eje
+  # de fundamento de esta narrativa está pendiente de una fuente mejor.
+  defillama: [helium-network, render-network-bme]
+  subreddits: [cryptocurrency]
+  polymarket_tags: [depin]
+  tickers: [HNT, RENDER]

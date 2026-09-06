@@ -1,0 +1,7 @@
+slug: btc-defi
+name: DeFi sobre Bitcoin
+entities:
+  defillama: [babylon-protocol, stacks-sbtc, pumpbtc, lorenzo-stbtc]
+  subreddits: [bitcoin]
+  polymarket_tags: [bitcoin]
+  tickers: [BABY, STX]

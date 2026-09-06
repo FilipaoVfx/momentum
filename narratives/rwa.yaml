@@ -1,0 +1,7 @@
+slug: rwa
+name: Activos del mundo real
+entities:
+  defillama: [ondo-yield-assets, ondo-global-markets, centrifuge-protocol, sky-rwa, usual-usd0]
+  subreddits: [defi]
+  polymarket_tags: [tokenization, treasury]
+  tickers: [ONDO, CFG, USUAL]

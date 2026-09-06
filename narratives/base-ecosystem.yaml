@@ -1,0 +1,7 @@
+slug: base-ecosystem
+name: Ecosistema Base
+entities:
+  defillama: [aerodrome-slipstream, aerodrome-v1, aerodrome-ignition]
+  subreddits: [base]
+  polymarket_tags: [coinbase, base]
+  tickers: [AERO]

@@ -1,0 +1,16 @@
+{
+  "name": "@momentum/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "typecheck": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@momentum/core": "workspace:*",
+    "@momentum/db": "workspace:*",
+    "@momentum/sources": "workspace:*",
+    "node-cron": "^3.0.3",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": { "@types/node-cron": "^3.0.11" }
+}

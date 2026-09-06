@@ -1,0 +1,12 @@
+{
+  "name": "@momentum/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "typecheck": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@momentum/core": "workspace:*",
+    "@momentum/db": "workspace:*",
+    "fastify": "^5.2.0"
+  }
+}
