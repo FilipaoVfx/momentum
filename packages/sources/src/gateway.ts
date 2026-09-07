@@ -1,9 +1,17 @@
 import { createHash } from 'node:crypto';
 import type { CollectionGap, Rating, SourceId, SourceResult } from '@momentum/core';
 import { gap, ok } from '@momentum/core';
-import { insertSnapshot, type Db } from '@momentum/db';
+import {
+  bumpUsage,
+  cooldownUntil,
+  insertSnapshot,
+  setCooldown,
+  usageToday,
+  type Db,
+} from '@momentum/db';
 import { CircuitBreaker } from './circuit-breaker.ts';
 import { PROVIDERS } from './config.ts';
+import { TokenBucket, parseRetryAfter } from './rate-limiter.ts';
 import { Semaphore } from './semaphore.ts';
 import { Singleflight } from './singleflight.ts';
 
@@ -56,6 +64,7 @@ export class SourceGateway {
   readonly #singleflight = new Singleflight();
   readonly #semaphores = new Map<SourceId, Semaphore>();
   readonly #breakers = new Map<SourceId, CircuitBreaker>();
+  readonly #buckets = new Map<SourceId, TokenBucket>();
 
   constructor(deps: GatewayDeps) {
     this.#db = deps.db;
@@ -71,6 +80,20 @@ export class SourceGateway {
       this.#breakers.set(source, breaker);
     }
     return breaker;
+  }
+
+  #bucket(source: SourceId): TokenBucket {
+    let bucket = this.#buckets.get(source);
+    if (!bucket) {
+      const { requestsPerMinute } = PROVIDERS[source];
+      bucket = new TokenBucket({
+        capacity: requestsPerMinute,
+        refillPerMinute: requestsPerMinute,
+        now: () => this.#now().getTime(),
+      });
+      this.#buckets.set(source, bucket);
+    }
+    return bucket;
   }
 
   #semaphore(source: SourceId): Semaphore {
@@ -93,10 +116,56 @@ export class SourceGateway {
       return gap(this.#gap(opts, 'circuit_open', 'circuito abierto; no se intenta la llamada'));
     }
 
+    // El proveedor nos pidió expresamente no volver todavía. Insistir sobre un
+    // `Retry-After` es la forma más rápida de convertir un 429 en un bloqueo.
+    const cooldown = await cooldownUntil(this.#db, opts.source, this.#now());
+    if (cooldown) {
+      return gap(
+        this.#gap(
+          opts,
+          'rate_limited',
+          `el proveedor pidió esperar hasta ${cooldown.toISOString()} (Retry-After)`,
+        ),
+      );
+    }
+
+    const spent = await usageToday(this.#db, opts.source, this.#now());
+    if (spent >= provider.dailyBudget) {
+      return gap(
+        this.#gap(
+          opts,
+          'rate_limited',
+          `presupuesto diario agotado: ${spent}/${provider.dailyBudget} llamadas`,
+        ),
+      );
+    }
+
+    // El cubo de fichas limita el ritmo; el semáforo limita la simultaneidad.
+    // Son cosas distintas y hacen falta las dos.
+    const bucket = this.#bucket(opts.source);
+    if (!bucket.tryTake()) {
+      const waitMs = bucket.waitMs();
+      const budgetMs = opts.budgetMs ?? provider.budgetMs;
+      if (waitMs > budgetMs) {
+        return gap(
+          this.#gap(
+            opts,
+            'rate_limited',
+            `sin fichas: habría que esperar ${waitMs} ms, más que el presupuesto de ${budgetMs} ms`,
+          ),
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      bucket.tryTake();
+    }
+
     return this.#semaphore(opts.source).run(async () => {
       const url = `${opts.baseUrl ?? provider.baseUrl}${opts.path}`;
       const budgetMs = opts.budgetMs ?? provider.budgetMs;
       const startedAt = this.#now();
+      // Se cuenta antes de salir: una llamada que se corta a medias también
+      // consumió cuota del proveedor.
+      await bumpUsage(this.#db, opts.source, startedAt);
       let response: Response;
       let body: string;
 
@@ -158,12 +227,21 @@ export class SourceGateway {
 
       if (!response.ok) {
         breaker.recordFailure();
+        if (response.status === 429) {
+          const until =
+            parseRetryAfter(response.headers.get('retry-after'), fetchedAt) ??
+            new Date(fetchedAt.getTime() + 60_000);
+          await setCooldown(this.#db, opts.source, until, fetchedAt);
+          return gap(
+            this.#gap(
+              opts,
+              'rate_limited',
+              `HTTP 429; en enfriamiento hasta ${until.toISOString()} (snapshot ${snapshotId})`,
+            ),
+          );
+        }
         return gap(
-          this.#gap(
-            opts,
-            response.status === 429 ? 'rate_limited' : 'source_down',
-            `HTTP ${response.status} (snapshot ${snapshotId})`,
-          ),
+          this.#gap(opts, 'source_down', `HTTP ${response.status} (snapshot ${snapshotId})`),
         );
       }
       if (isEmpty) {

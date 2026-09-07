@@ -116,6 +116,63 @@ describe('degradación (NFR-020, M§3)', () => {
   });
 });
 
+describe('presupuesto y ritmo (NFR-061)', () => {
+  it('respeta el Retry-After de un 429 y no vuelve a salir', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: 'slow down' }), {
+          status: 429,
+          headers: { 'retry-after': '120' },
+        }),
+    );
+    const gateway = new SourceGateway({ db, fetchImpl });
+
+    const first = await get(gateway);
+    expect(first.ok === false && first.gap.reason).toBe('rate_limited');
+    expect(first.ok === false && first.gap.detail).toContain('enfriamiento');
+
+    const second = await get(gateway);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(second.ok === false && second.gap.detail).toContain('Retry-After');
+
+    const { rows } = await db.query('select cooldown_until from provider_usage');
+    expect(rows[0].cooldown_until).toBeInstanceOf(Date);
+  });
+
+  it('cuenta cada llamada contra el presupuesto diario', async () => {
+    const gateway = new SourceGateway({
+      db,
+      fetchImpl: async () => response(JSON.stringify({ tvl: 1 })),
+    });
+    for (let i = 0; i < 3; i += 1) {
+      await gateway.get({
+        source: 'defillama',
+        path: `/tvl/p${i}`,
+        requestKey: `defillama:protocol:p${i}`,
+      });
+    }
+    const { rows } = await db.query(
+      "select provider, calls from provider_usage where provider = 'defillama'",
+    );
+    expect(Number(rows[0].calls)).toBe(3);
+  });
+
+  it('agotado el presupuesto no toca la red', async () => {
+    const fetchImpl = vi.fn(async () => response(JSON.stringify({ tvl: 1 })));
+    const gateway = new SourceGateway({ db, fetchImpl });
+    const today = new Date().toISOString().slice(0, 10);
+    await db.query(
+      "insert into provider_usage (provider, usage_day, calls) values ('defillama', $1, 99999)",
+      [today],
+    );
+
+    const result = await get(gateway);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.ok === false && result.gap.reason).toBe('rate_limited');
+    expect(result.ok === false && result.gap.detail).toContain('presupuesto diario agotado');
+  });
+});
+
 describe('coalescing en el camino real', () => {
   it('cien solicitudes concurrentes producen una llamada y un snapshot', async () => {
     const fetchImpl = vi.fn(async () => {

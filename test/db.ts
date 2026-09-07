@@ -20,6 +20,6 @@ export async function truncateAll(db: Db): Promise<void> {
   await db.query(`
     truncate table collection_gap, outcome, quadrant_state, metric_point,
                    fundamental_observation, mention_event, source_snapshot,
-                   narrative_entity, narrative, run
+                   narrative_entity, narrative, run, provider_usage
     restart identity cascade`);
 }

@@ -16,6 +16,7 @@ import {
   type FetchedSnapshot,
   type RedditCredentials,
 } from '@momentum/sources';
+import { isDue } from './cadence.ts';
 import type { DictionaryIndex } from './dictionary.ts';
 import { processBatch, type BatchResult } from './pipeline.ts';
 
@@ -24,6 +25,8 @@ export interface IngestResult {
   readonly batch: BatchResult | null;
   readonly gaps: readonly CollectionGap[];
   readonly snapshotCount: number;
+  /** Llamadas no hechas por cadencia. No son brechas: el dato ya está fresco. */
+  readonly skippedByCadence: number;
 }
 
 /**
@@ -49,45 +52,75 @@ export async function ingestOnce(deps: {
     ...(deps.now ? { now: deps.now } : {}),
   });
   const gaps: CollectionGap[] = [];
+  let skipped = 0;
   const collect = (result: SourceResult<FetchedSnapshot>): void => {
     if (!result.ok) gaps.push(result.gap);
   };
 
   try {
     const narratives = await listNarratives(db);
+    const now = deps.now?.() ?? new Date();
+
+    /** Solo se pide lo que toca según su cadencia (ver `cadence.ts`). */
+    const when = async (
+      requestKey: string,
+      cadence: 'fast' | 'slow',
+      call: () => Promise<SourceResult<FetchedSnapshot>>,
+    ): Promise<void> => {
+      if (await isDue(db, requestKey, cadence, now)) collect(await call());
+      else skipped += 1;
+    };
 
     // Dos llamadas agregadas para todo el universo, no dos por narrativa: el
     // costo del plano frío escala con el diccionario, no con los usuarios
-    // (NFR-060).
-    const overviews = await Promise.all([
-      defillama.fetchFeesOverview(gateway),
-      defillama.fetchDexsOverview(gateway),
-    ]);
-    overviews.forEach(collect);
-
-    const perEntity = await Promise.all([
-      ...index.defillamaProtocols.map((p) => defillama.fetchProtocol(gateway, p)),
-      ...index.subreddits.map((s) =>
-        reddit.fetchNewListing(gateway, s, {
-          ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
-          ...(deps.redditCredentials !== undefined ? { credentials: deps.redditCredentials } : {}),
-        }),
+    // (NFR-060). Son totales de 24 h, así que van a cadencia lenta.
+    await Promise.all([
+      when(defillama.requestKeys.feesOverview(), 'slow', () =>
+        defillama.fetchFeesOverview(gateway),
       ),
-      polymarket.fetchTopMarkets(gateway),
+      when(defillama.requestKeys.dexsOverview(), 'slow', () =>
+        defillama.fetchDexsOverview(gateway),
+      ),
     ]);
-    perEntity.forEach(collect);
+
+    await Promise.all([
+      ...index.defillamaProtocols.map((p) =>
+        when(defillama.requestKeys.protocol(p), 'slow', () =>
+          defillama.fetchProtocol(gateway, p),
+        ),
+      ),
+      ...index.subreddits.map((s) =>
+        when(reddit.requestKeys.newListing(s), 'fast', () =>
+          reddit.fetchNewListing(gateway, s, {
+            ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+            ...(deps.redditCredentials !== undefined
+              ? { credentials: deps.redditCredentials }
+              : {}),
+          }),
+        ),
+      ),
+      when(polymarket.requestKeys.topMarkets(), 'fast', () =>
+        polymarket.fetchTopMarkets(gateway),
+      ),
+    ]);
 
     const snapshots = await listSnapshotsByRun(db, runId);
     let batch: BatchResult | null = null;
 
     if (snapshots.length === 0) {
-      // Ninguna fuente respondió. Se declara y se termina: no hay serie que
-      // calcular y fingir una a partir de la corrida anterior sería mentir.
-      gaps.push({
-        source: 'defillama',
-        reason: 'source_down',
-        detail: 'ninguna fuente respondió en esta corrida; no se calcularon series',
-      });
+      // Sin capturas nuevas no se calcula serie. La tentación es producir un
+      // punto igualmente, porque la ventana de 24 h todavía tiene datos de
+      // corridas anteriores — pero ese punto sería irreproducible: el replay
+      // agrupa por corrida, y una corrida sin snapshots no existe para él.
+      // Un punto que no se puede reconstruir rompe el criterio de M1.
+      if (skipped === 0) {
+        // Y si además no saltamos nada, es que no respondió nadie.
+        gaps.push({
+          source: 'defillama',
+          reason: 'source_down',
+          detail: 'ninguna fuente respondió en esta corrida; no se calcularon series',
+        });
+      }
     } else {
       const windowEnd = snapshots.reduce(
         (latest, s) => (s.fetchedAt > latest ? s.fetchedAt : latest),
@@ -100,7 +133,7 @@ export async function ingestOnce(deps: {
     const idBySlug = new Map(narratives.map((n) => [n.slug, n.id]));
     await recordGaps(db, runId, idBySlug, gaps);
     await finishRun(db, runId, 'ok');
-    return { runId, batch, gaps, snapshotCount: snapshots.length };
+    return { runId, batch, gaps, snapshotCount: snapshots.length, skippedByCadence: skipped };
   } catch (error) {
     await finishRun(db, runId, 'failed');
     throw error;

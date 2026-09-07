@@ -1,6 +1,7 @@
 export * from './singleflight.ts';
 export * from './semaphore.ts';
 export * from './circuit-breaker.ts';
+export * from './rate-limiter.ts';
 export * from './config.ts';
 export * from './gateway.ts';
 export * as defillama from './adapters/defillama.ts';

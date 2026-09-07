@@ -26,6 +26,13 @@ export async function replay(deps: {
   readonly from: Date;
   readonly to?: Date;
   readonly scoreVersion?: string;
+  /**
+   * Reconstruir también la clasificación. Por defecto **no**: `quadrant_state`
+   * registra lo que afirmamos en su momento y `outcome` mide si acertamos.
+   * Recalcularlo sobre la marcha convertiría cada replay en una oportunidad de
+   * quedar bien con el pasado, que es justo lo contrario de medir el acierto.
+   */
+  readonly classifyQuadrants?: boolean;
 }): Promise<{ runId: string; batches: BatchResult[] }> {
   const { db, index, from } = deps;
   const to = deps.to ?? new Date();
@@ -58,6 +65,7 @@ export async function replay(deps: {
         snapshots: group.snapshots,
         windowEnd: group.windowEnd,
         scoreVersion,
+        classify: deps.classifyQuadrants ?? false,
       });
       batches.push(batch);
       gaps.push(...batch.gaps);

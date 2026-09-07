@@ -51,6 +51,7 @@ Detalle completo y decisiones registradas en [`docs/ARD.md`](docs/ARD.md).
 | [`docs/SRS.md`](docs/SRS.md) | Requisitos funcionales y no funcionales con ID |
 | [`docs/ARD.md`](docs/ARD.md) | Arquitectura, modelo de concurrencia y ADRs |
 | [`docs/MANIFIESTO-CALIDAD.md`](docs/MANIFIESTO-CALIDAD.md) | Criterio de calidad y filosofía OSINT |
+| [`docs/FUENTES.md`](docs/FUENTES.md) | Acceso, límites y credenciales de cada fuente |
 
 **Orden de lectura sugerido:** manifiesto → PRD → ARD → SRS. El manifiesto va
 primero porque los otros tres se derivan de él; los requisitos del SRS trazan de
@@ -83,7 +84,7 @@ pnpm install
 pnpm migrate up                        # esquema
 pnpm dict:sync                         # 15 narrativas curadas → base
 pnpm worker:once                       # una corrida contra las fuentes reales
-pnpm test                              # 84 pruebas, ninguna depende de la red
+pnpm test                              # 111 pruebas, ninguna depende de la red
 ```
 
 `pnpm worker:replay --from=-14d` recalcula la historia leyendo solo
@@ -93,11 +94,15 @@ pasado.
 
 ### Fuentes
 
-| Fuente | Eje | Estado |
-|---|---|---|
-| DefiLlama | Fundamento | Operativa, sin credenciales |
-| Polymarket | Atención (capital en riesgo) | Operativa, sin credenciales |
-| Reddit | Atención (social) | Requiere `REDDIT_CLIENT_ID`/`SECRET`; sin ellas la corrida declara la brecha y sigue |
+| Fuente | Eje | Estado | Cadencia |
+|---|---|---|---|
+| DefiLlama | Fundamento | Operativa, sin credenciales | 60 min |
+| Polymarket | Atención (capital en riesgo) | Operativa, sin credenciales | 15 min |
+| Reddit | Atención (social) | Requiere `REDDIT_CLIENT_ID`/`SECRET`; sin ellas la corrida declara la brecha y sigue | 15 min |
+
+Cada proveedor tiene techo por minuto y presupuesto diario, y el sistema respeta
+`Retry-After` cuando le piden esperar. Detalle de accesos, límites medidos y
+credenciales en [`docs/FUENTES.md`](docs/FUENTES.md).
 
 ---
 

@@ -27,12 +27,20 @@ export const SERIES_WINDOW = WINDOWS.find((w) => w.window === '24h')!;
 /** Horizonte sobre el que se mide la pendiente (FR-011: derivada, no nivel). */
 export const SLOPE_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
+export type QuadrantOutcome =
+  | 'unchanged'
+  | 'opened'
+  | 'transitioned'
+  | 'insufficient_data'
+  | 'out_of_order'
+  | 'skipped';
+
 export interface BatchResult {
   readonly windowEnd: Date;
   readonly mentionsInserted: number;
   readonly fundamentalsInserted: number;
   readonly pointsWritten: number;
-  readonly quadrants: Record<string, 'unchanged' | 'opened' | 'transitioned' | 'insufficient_data'>;
+  readonly quadrants: Record<string, QuadrantOutcome>;
   readonly gaps: CollectionGap[];
 }
 
@@ -51,6 +59,13 @@ export async function processBatch(input: {
   readonly snapshots: readonly StoredSnapshot[];
   readonly windowEnd: Date;
   readonly scoreVersion?: string;
+  /**
+   * Si es `false`, se recalculan las series pero no se toca la clasificación.
+   * El replay lo usa: `quadrant_state` es el registro de lo que dijimos en su
+   * momento y `outcome` mide exactamente eso. Reescribirlo al recalcular
+   * borraría nuestra propia tasa de acierto (M§14).
+   */
+  readonly classify?: boolean;
 }): Promise<BatchResult> {
   const { db, index, narratives, snapshots, windowEnd } = input;
   const scoreVersion = input.scoreVersion ?? SCORE_VERSION;
@@ -106,7 +121,10 @@ export async function processBatch(input: {
     insertMetricPoints(tx, idBySlug, points),
   );
 
-  const quadrants = await classifyAll({ db, narratives, windowEnd, scoreVersion });
+  const quadrants =
+    input.classify === false
+      ? Object.fromEntries(narratives.map((n) => [n.slug, 'skipped' as const]))
+      : await classifyAll({ db, narratives, windowEnd, scoreVersion });
   return {
     windowEnd,
     mentionsInserted,
@@ -122,10 +140,10 @@ async function classifyAll(input: {
   readonly narratives: readonly NarrativeRecord[];
   readonly windowEnd: Date;
   readonly scoreVersion: string;
-}): Promise<BatchResult['quadrants']> {
+}): Promise<Record<string, QuadrantOutcome>> {
   const { db, narratives, windowEnd, scoreVersion } = input;
   const since = new Date(windowEnd.getTime() - SLOPE_LOOKBACK_MS);
-  const result: Record<string, BatchResult['quadrants'][string]> = {};
+  const result: Record<string, QuadrantOutcome> = {};
 
   for (const narrative of narratives) {
     const series = await listMetricPoints(db, {

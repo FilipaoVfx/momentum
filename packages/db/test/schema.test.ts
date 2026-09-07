@@ -20,13 +20,24 @@ const narrativeId = (): Promise<string> =>
   );
 
 describe('migraciones', () => {
-  it('aplican y revierten', async () => {
-    expect(await appliedMigrations(db)).toContain('0001_init');
-    const reverted = await migrateDown(db);
-    expect(reverted).toBe('0001_init');
+  it('aplican y revierten en orden inverso, hasta dejar la base vacía', async () => {
+    const applied = await appliedMigrations(db);
+    expect(applied).toContain('0001_init');
+    expect(applied).toContain('0002_provider_usage');
+
+    // Se revierten todas: una migración que solo sabe aplicarse no es
+    // reversible, es un camino de ida.
+    const reverted: string[] = [];
+    for (let i = applied.length; i > 0; i -= 1) {
+      const name = await migrateDown(db);
+      if (name) reverted.push(name);
+    }
+    expect(reverted).toEqual([...applied].reverse());
     expect(await appliedMigrations(db)).toHaveLength(0);
+    expect(await migrateDown(db)).toBeNull();
+
     await migrateUp(db);
-    expect(await appliedMigrations(db)).toContain('0001_init');
+    expect(await appliedMigrations(db)).toEqual(applied);
   });
 });
 

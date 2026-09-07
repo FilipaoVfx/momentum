@@ -43,9 +43,15 @@ export async function recordQuadrant(
     readonly scoreVersion: string;
     readonly at: Date;
   },
-): Promise<'unchanged' | 'opened' | 'transitioned'> {
+): Promise<'unchanged' | 'opened' | 'transitioned' | 'out_of_order'> {
   const current = await openQuadrantState(tx, input.narrativeId, input.scoreVersion);
   if (current?.quadrant === input.quadrant) return 'unchanged';
+
+  // Una transición con fecha anterior al estado abierto reescribiría el pasado:
+  // diría que dejamos de creer algo antes de empezar a creerlo. Se rechaza y se
+  // informa, en vez de escribir una fila incoherente o reventar contra la
+  // restricción del esquema.
+  if (current && input.at <= current.startedAt) return 'out_of_order';
 
   if (current) {
     await tx.query('update quadrant_state set ended_at = $1 where id = $2', [

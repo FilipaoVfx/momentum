@@ -355,6 +355,43 @@ normal del código en vez de una rama de error que alguien recuerde escribir.
 
 ---
 
+### ADR-013 — El replay no reescribe la clasificación
+
+**Contexto.** `worker:replay` recalcula la historia desde los snapshots crudos.
+La primera implementación recalculaba también el cuadrante, y al hacerlo
+intentaba cerrar estados abiertos con fechas anteriores a su inicio.
+
+**Decisión.** El replay recalcula **series** (`metric_point`) y no toca
+`quadrant_state` ni `outcome` salvo petición explícita. `recordQuadrant` rechaza
+además cualquier transición con fecha anterior al estado abierto.
+
+**Consecuencias.** Una fórmula nueva se evalúa comparando series, y para
+comparar clasificaciones hay que correr el replay con otra `score_version`, que
+tiene su propia historia. A cambio se protege lo único que mide si acertamos:
+`quadrant_state` registra lo que afirmamos en su momento y `outcome` mide
+exactamente eso. Un replay que reescribe el pasado convierte cada recálculo en
+una oportunidad de quedar bien con él, y la tasa de acierto deja de significar
+nada (M§14).
+
+---
+
+### ADR-014 — Cadencia por eje, no por corrida
+
+**Contexto.** El plano frío corría entero cada 15 minutos. Medido sobre el
+diccionario de 15 narrativas, cuatro de cada cinco llamadas del sistema eran a
+DefiLlama por datos que son totales de 24 h.
+
+**Decisión.** Cada familia de solicitud declara su cadencia: atención cada 15
+minutos, fundamento cada hora. La decisión se toma leyendo el store, no un
+temporizador en memoria.
+
+**Consecuencias.** El eje de fundamento tiene resolución horaria en vez de
+cuartohoraria, irrelevante para una ventana de agregación de 24 h. A cambio,
+DefiLlama baja de 5.088 a 1.272 llamadas diarias. El replay no se entera:
+reconstruye con los snapshots que haya, sin importar a qué ritmo se capturaron.
+
+---
+
 ## 9. Deuda aceptada conscientemente
 
 Estas no son omisiones; son decisiones con fecha de revisión.

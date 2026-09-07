@@ -94,3 +94,12 @@ function mapSnapshot(r: Record<string, unknown>): StoredSnapshot {
     },
   };
 }
+
+/** Instante de la última captura de una `requestKey`, o `null` si nunca se pidió. */
+export async function lastFetchedAt(db: Db, requestKey: string): Promise<Date | null> {
+  const { rows } = await db.query<{ fetched_at: Date }>(
+    'select fetched_at from source_snapshot where request_key = $1 order by fetched_at desc limit 1',
+    [requestKey],
+  );
+  return rows[0]?.fetched_at ?? null;
+}

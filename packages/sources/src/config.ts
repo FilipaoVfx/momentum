@@ -4,6 +4,14 @@ export interface ProviderConfig {
   readonly baseUrl: string;
   /** Alineado al límite de tasa contractual del proveedor, no a un número redondo. */
   readonly concurrency: number;
+  /**
+   * Techo de llamadas por minuto. Ninguno de los tres proveedores publica el
+   * suyo, así que estos valores son una apuesta conservadora, no un dato: se
+   * suben con evidencia de que aguantan, nunca por optimismo.
+   */
+  readonly requestsPerMinute: number;
+  /** Presupuesto diario. Agotado, no se toca la red y se declara la brecha. */
+  readonly dailyBudget: number;
   /** Presupuesto por llamada en el plano frío. El caliente usa 1.200 ms (NFR-004). */
   readonly budgetMs: number;
   /**
@@ -19,6 +27,11 @@ export const PROVIDERS: Readonly<Record<SourceId, ProviderConfig>> = {
   defillama: {
     baseUrl: 'https://api.llama.fi',
     concurrency: 4,
+    // 53 protocolos + 2 agregados por corrida horaria = 55 llamadas/hora.
+    // El techo deja margen para un barrido puntual sin acercarse a lo que
+    // Cloudflare pueda considerar abuso.
+    requestsPerMinute: 60,
+    dailyBudget: 4_000,
     budgetMs: 8_000,
     rating: { reliability: 'A', credibility: 2 },
   },
@@ -27,6 +40,10 @@ export const PROVIDERS: Readonly<Record<SourceId, ProviderConfig>> = {
   reddit: {
     baseUrl: 'https://www.reddit.com',
     concurrency: 2,
+    // Reddit documenta 100 peticiones por minuto por cliente OAuth. Nos
+    // quedamos en la mitad: 11 subreddits cada 15 minutos son 44 por hora.
+    requestsPerMinute: 50,
+    dailyBudget: 2_000,
     budgetMs: 8_000,
     rating: { reliability: 'C', credibility: 3 },
   },
@@ -35,6 +52,10 @@ export const PROVIDERS: Readonly<Record<SourceId, ProviderConfig>> = {
   polymarket: {
     baseUrl: 'https://gamma-api.polymarket.com',
     concurrency: 2,
+    // Una llamada por corrida. El techo existe por si M2 empieza a consultar
+    // mercados por narrativa, no por el consumo de hoy.
+    requestsPerMinute: 30,
+    dailyBudget: 1_000,
     budgetMs: 8_000,
     rating: { reliability: 'B', credibility: 2 },
   },

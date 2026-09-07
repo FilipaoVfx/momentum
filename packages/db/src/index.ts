@@ -7,4 +7,5 @@ export * from './repositories/metrics.ts';
 export * from './repositories/fundamentals.ts';
 export * from './repositories/quadrants.ts';
 export * from './repositories/runs.ts';
+export * from './repositories/usage.ts';
 export * from './repositories/outcomes.ts';
