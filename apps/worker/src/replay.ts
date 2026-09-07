@@ -10,6 +10,7 @@ import {
   type StoredSnapshot,
 } from '@momentum/db';
 import type { DictionaryIndex } from './dictionary.ts';
+import { rebuildFundamentalHistory } from './history.ts';
 import { SLOPE_LOOKBACK_MS, processBatch, type BatchResult } from './pipeline.ts';
 
 /**
@@ -57,7 +58,26 @@ export async function replay(deps: {
       },
     ];
 
-    for (const group of groupByRun(snapshots)) {
+    // Las series históricas se reconstruyen aparte y en instantes deterministas
+    // (medianoche UTC), no en la ventana de la corrida que las capturó: si no,
+    // catorce días de fundamento colapsarían en el instante del backfill.
+    await rebuildFundamentalHistory({
+      db,
+      index,
+      narratives,
+      snapshots,
+      since: from,
+      until: to,
+      scoreVersion,
+    });
+
+    // Los snapshots históricos ya se han reconstruido arriba, en sus instantes
+    // diarios. Volver a pasarlos por el lote de la corrida que los capturó
+    // añadiría un punto extra en el instante del backfill: mismo dato, ventana
+    // distinta, y el replay dejaría de ser idéntico al original.
+    const live = snapshots.filter((s) => !s.requestKey.startsWith('defillama:history'));
+
+    for (const group of groupByRun(live)) {
       const batch = await processBatch({
         db,
         index,

@@ -48,7 +48,8 @@ export async function listMetricPoints(
   opts: {
     readonly narrativeId?: string;
     readonly axis?: Axis;
-    readonly window: WindowLabel;
+    /** Sin ventana, devuelve todas: cada eje usa la suya. */
+    readonly window?: WindowLabel;
     readonly scoreVersion: string;
     readonly since: Date;
     readonly until: Date;
@@ -59,12 +60,12 @@ export async function listMetricPoints(
             m.score_version, m.input_snapshot_ids
        from metric_point m
        join narrative n on n.id = m.narrative_id
-      where m.window_label = $1 and m.score_version = $2
+      where ($1::text is null or m.window_label = $1) and m.score_version = $2
         and m.observed_at > $3 and m.observed_at <= $4
         and ($5::uuid is null or m.narrative_id = $5)
         and ($6::text is null or m.axis = $6)
       order by m.observed_at asc`,
-    [opts.window, opts.scoreVersion, opts.since, opts.until, opts.narrativeId ?? null, opts.axis ?? null],
+    [opts.window ?? null, opts.scoreVersion, opts.since, opts.until, opts.narrativeId ?? null, opts.axis ?? null],
   );
   return rows.map((r) => ({
     narrativeId: r.narrative_id as string,

@@ -20,7 +20,21 @@ export interface Derived {
   readonly fundamentals: FundamentalObservation[];
 }
 
-export function deriveFromSnapshot(snapshot: StoredSnapshot, index: DictionaryIndex): Derived {
+export interface DeriveOptions {
+  /**
+   * Corta la serie histórica por abajo. Es un filtro sobre lo que se deriva, no
+   * sobre lo que se guarda: el snapshot conserva el payload íntegro. Sin esto,
+   * un solo protocolo aportaría más de dos mil observaciones que se remontan a
+   * 2020 y que a nadie le sirven.
+   */
+  readonly since?: Date;
+}
+
+export function deriveFromSnapshot(
+  snapshot: StoredSnapshot,
+  index: DictionaryIndex,
+  options: DeriveOptions = {},
+): Derived {
   const mentions: MentionEvent[] = [];
   const fundamentals: FundamentalObservation[] = [];
   const key = snapshot.requestKey;
@@ -39,6 +53,49 @@ export function deriveFromSnapshot(snapshot: StoredSnapshot, index: DictionaryIn
         volume24hUsd: null,
         snapshotId: snapshot.id,
       });
+    }
+  } else if (key.startsWith('defillama:history:')) {
+    const protocol = defillama.normalizeSlug(key.slice('defillama:history:'.length));
+    const narratives = index.narrativesForDefillama(protocol);
+    if (narratives.length > 0) {
+      for (const point of defillama.parseProtocolHistory(snapshot.payload)) {
+        if (options.since && point.at < options.since) continue;
+        for (const narrativeSlug of narratives) {
+          fundamentals.push({
+            source: 'defillama',
+            narrativeSlug,
+            entity: protocol,
+            // El instante real del dato, no el de la captura: es historia.
+            observedAt: point.at,
+            tvlUsd: point.tvlUsd,
+            fees24hUsd: null,
+            volume24hUsd: null,
+            snapshotId: snapshot.id,
+          });
+        }
+      }
+    }
+  } else if (
+    key.startsWith('defillama:history-fees:') ||
+    key.startsWith('defillama:history-dexs:')
+  ) {
+    const isFees = key.startsWith('defillama:history-fees:');
+    const prefix = isFees ? 'defillama:history-fees:' : 'defillama:history-dexs:';
+    const protocol = defillama.normalizeSlug(key.slice(prefix.length));
+    for (const narrativeSlug of index.narrativesForDefillama(protocol)) {
+      for (const point of defillama.parseSummaryHistory(snapshot.payload)) {
+        if (options.since && point.at < options.since) continue;
+        fundamentals.push({
+          source: 'defillama',
+          narrativeSlug,
+          entity: protocol,
+          observedAt: point.at,
+          tvlUsd: null,
+          fees24hUsd: isFees ? point.tvlUsd : null,
+          volume24hUsd: isFees ? null : point.tvlUsd,
+          snapshotId: snapshot.id,
+        });
+      }
     }
   } else if (key === 'defillama:overview:fees' || key === 'defillama:overview:dexs') {
     const totals = defillama.parseOverviewTotals(snapshot.payload);
@@ -105,11 +162,15 @@ export function deriveFromSnapshot(snapshot: StoredSnapshot, index: DictionaryIn
   return { mentions, fundamentals };
 }
 
-export function deriveAll(snapshots: readonly StoredSnapshot[], index: DictionaryIndex): Derived {
+export function deriveAll(
+  snapshots: readonly StoredSnapshot[],
+  index: DictionaryIndex,
+  options: DeriveOptions = {},
+): Derived {
   const mentions: MentionEvent[] = [];
   const fundamentals: FundamentalObservation[] = [];
   for (const snapshot of snapshots) {
-    const derived = deriveFromSnapshot(snapshot, index);
+    const derived = deriveFromSnapshot(snapshot, index, options);
     mentions.push(...derived.mentions);
     fundamentals.push(...derived.fundamentals);
   }

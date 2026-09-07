@@ -14,6 +14,9 @@ export const requestKeys = {
   protocol: (slug: string) => `defillama:protocol:${slug}`,
   // Se conserva por si hiciera falta releer snapshots antiguos capturados con
   // el endpoint pesado; la ingesta ya no lo usa.
+  history: (slug: string) => `defillama:history:${slug}`,
+  feesHistory: (slug: string) => `defillama:history-fees:${slug}`,
+  dexsHistory: (slug: string) => `defillama:history-dexs:${slug}`,
   feesOverview: () => 'defillama:overview:fees',
   dexsOverview: () => 'defillama:overview:dexs',
 } as const;
@@ -35,6 +38,58 @@ export function fetchProtocol(
     source: 'defillama',
     path: `/tvl/${encodeURIComponent(slug)}`,
     requestKey: requestKeys.protocol(slug),
+  });
+}
+
+/**
+ * Serie histórica completa de un protocolo.
+ *
+ * Usa `/protocol/{slug}`, el endpoint pesado que la ingesta evita a propósito
+ * (2 MB por protocolo). Aquí compensa: se paga una sola vez y da los 14 días de
+ * fundamento que el eje necesita para que una pendiente signifique algo. La
+ * ingesta periódica sigue usando `/tvl/{slug}`.
+ */
+export function fetchProtocolHistory(
+  gateway: SourceGateway,
+  slug: string,
+): Promise<SourceResult<FetchedSnapshot>> {
+  return gateway.get({
+    source: 'defillama',
+    path: `/protocol/${encodeURIComponent(slug)}`,
+    requestKey: requestKeys.history(slug),
+    budgetMs: 30_000,
+  });
+}
+
+/**
+ * Historia diaria de comisiones y de volumen.
+ *
+ * Sin estas dos, el backfill produciría una serie de solo TVL empalmada con una
+ * serie viva de tres componentes: el escalón del empalme no sería un cambio del
+ * fundamento, sería un cambio de lo que estamos midiendo. Un gráfico así miente
+ * aunque cada punto por separado sea cierto.
+ */
+export function fetchFeesHistory(
+  gateway: SourceGateway,
+  slug: string,
+): Promise<SourceResult<FetchedSnapshot>> {
+  return gateway.get({
+    source: 'defillama',
+    path: `/summary/fees/${encodeURIComponent(slug)}?dataType=dailyFees`,
+    requestKey: requestKeys.feesHistory(slug),
+    budgetMs: 30_000,
+  });
+}
+
+export function fetchDexsHistory(
+  gateway: SourceGateway,
+  slug: string,
+): Promise<SourceResult<FetchedSnapshot>> {
+  return gateway.get({
+    source: 'defillama',
+    path: `/summary/dexs/${encodeURIComponent(slug)}`,
+    requestKey: requestKeys.dexsHistory(slug),
+    budgetMs: 30_000,
   });
 }
 
@@ -99,6 +154,42 @@ export function parseOverviewTotals(payload: unknown): Map<string, number> {
     }
   }
   return totals;
+}
+
+export interface HistoricalTvlPoint {
+  readonly at: Date;
+  readonly tvlUsd: number;
+}
+
+/** Serie `tvl[]` de `/protocol/{slug}`, con las fechas en su instante real. */
+export function parseProtocolHistory(payload: unknown): HistoricalTvlPoint[] {
+  const root = asRecord(payload);
+  const series = root?.['tvl'];
+  if (!Array.isArray(series)) return [];
+  const points: HistoricalTvlPoint[] = [];
+  for (const entry of series) {
+    const p = asRecord(entry);
+    const date = asFiniteNumber(p?.['date']);
+    const value = asFiniteNumber(p?.['totalLiquidityUSD']);
+    if (date === null || value === null) continue;
+    points.push({ at: new Date(date * 1000), tvlUsd: value });
+  }
+  return points;
+}
+
+/** Serie `totalDataChart` de `/summary/{fees,dexs}/{slug}`: pares [epoch, valor]. */
+export function parseSummaryHistory(payload: unknown): HistoricalTvlPoint[] {
+  const chart = asRecord(payload)?.['totalDataChart'];
+  if (!Array.isArray(chart)) return [];
+  const points: HistoricalTvlPoint[] = [];
+  for (const entry of chart) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const at = asFiniteNumber(entry[0]);
+    const value = asFiniteNumber(entry[1]);
+    if (at === null || value === null) continue;
+    points.push({ at: new Date(at * 1000), tvlUsd: value });
+  }
+  return points;
 }
 
 /** DefiLlama mezcla `Lido`, `lido` y `lido-finance` según el endpoint. */

@@ -392,6 +392,140 @@ reconstruye con los snapshots que haya, sin importar a qué ritmo se capturaron.
 
 ---
 
+### ADR-015 — Despliegue estático en GitHub Pages
+
+**Contexto.** El MVP tenía que poder verse y usarse sin montar infraestructura.
+GitHub Pages sirve ficheros estáticos: no hay servidor ni base detrás.
+
+**Decisión.** El plano frío corre en GitHub Actions contra un Postgres alojado y
+exporta JSON —feed, ficha por narrativa y metadatos de salud— que el sitio
+consume. El **lens llama a sus fuentes desde el navegador**: DEX Screener,
+GeckoTerminal y DefiLlama responden con `Access-Control-Allow-Origin: *`
+(comprobado), así que ese bloque no necesita servidor.
+
+**Consecuencias.** Tres pérdidas reales, y ninguna se disimula en la interfaz:
+
+1. **No hay plano caliente.** Esto no es M2: es una versión del lens que vive en
+   el cliente. Sin servidor no hay singleflight compartido ni presupuesto de
+   latencia propagado, y cada visitante consume cuota de las APIs por su cuenta.
+2. **La frescura la marca el `cron` de Actions**, que se retrasa y a veces se
+   salta ejecuciones. Por eso cada pantalla declara su `generatedAt` y marca el
+   dato como viejo cuando lo es, en vez de aparentar tiempo real.
+3. **Los tenedores siguen fuera.** El RPC público de Solana devuelve 429 a la
+   primera llamada, así que ese bloque se renderiza como no disponible — que es
+   visualmente distinto de un cero y de un dato viejo.
+
+Se revisa cuando exista el plano caliente de M2 y haya dónde desplegarlo.
+
+---
+
+### ADR-016 — Cómo se agrega el eje de fundamento (score v2)
+
+**Contexto.** Al dibujar la primera serie con historia real, el eje de fundamento
+salió en diente de sierra, con saltos de más de 3 unidades sobre un recorrido
+total de 0,2. El gráfico hacía visible un fallo que las pruebas no veían.
+
+**Diagnóstico.** El salto no era el fundamento moviéndose: era el compuesto
+midiendo otra cosa según qué publicaba la fuente ese día. Tres causas
+encadenadas, y las tres se descubrieron mirando la serie, no leyendo el código:
+
+1. **Sumar los términos presentes** hacía que una entidad con TVL, comisiones y
+   volumen puntuara por encima de otra idéntica con un solo componente.
+2. **Normalizar por entidad** lo empeoró: una entidad de la que solo se conoce
+   el TVL puntúa ~23 —el logaritmo de miles de millones— y otra que además
+   reporta comisiones ~14; la media entre entidades saltaba según cuántas
+   publicaran ese día.
+3. **Promediar logaritmos entre entidades** de tamaños muy distintos es
+   inestable: las comisiones de Lido y las de Marinade se separan en órdenes de
+   magnitud, así que la entrada o salida de una pequeña movía la media.
+
+**Decisión.** `SCORE_VERSION` sube a `v2` con cuatro cambios:
+
+1. Se **suman los dólares** de cada componente entre las entidades de la
+   narrativa y **después** se toma el logaritmo. El fundamento de una narrativa
+   son las comisiones que cobran sus protocolos, no el promedio de sus
+   logaritmos.
+2. Los componentes se combinan con sus pesos **normalizados por los presentes**,
+   de modo que la escala no dependa de cuántos haya.
+3. **Ventana de 48 h** para este eje (ADR-014 fija 15 min y 1 h para las
+   cadencias; esto es la ventana de agregación): las cifras diarias llegan con
+   retraso variable y con 24 h la base cambiaba de un día para otro.
+4. **No se publica un punto sin al menos una señal de flujo** —comisiones o
+   volumen—. Un compuesto de solo TVL no es comparable con el resto de la serie,
+   y además el TVL es el componente más fácil de inflar haciendo circular
+   capital propio en bucle (M§22). Sin flujo al lado, se declara la brecha.
+
+El backfill, además, trae los tres componentes históricos y **omite el día en
+curso**, que está incompleto por construcción.
+
+**Consecuencias.** Un cero reportado y un campo ausente dejan de ser
+equivalentes, que es lo correcto: «cobró cero» es un dato y «no sabemos cuánto
+cobró» es un hueco. Las narrativas cuyas entidades no publican ningún flujo se
+quedan sin eje de fundamento y lo declaran. Medido tras el cambio, el mayor
+salto entre días pasó de 3,8 a 0,23.
+
+**Lo que queda pendiente.** Si una entidad grande desaparece de una ventana, el
+total cae de verdad y la serie lo refleja como una caída del fundamento. La
+solución de fondo —registrar en cada punto el conjunto de entidades que lo
+compone y comparar solo puntos homogéneos— no está hecha.
+
+---
+
+### ADR-015 — Despliegue estático en GitHub Pages
+
+**Contexto.** El MVP tenía que poder verse y usarse sin montar infraestructura.
+GitHub Pages sirve ficheros estáticos: no hay servidor ni base detrás.
+
+**Decisión.** El plano frío corre en GitHub Actions contra un Postgres alojado y
+exporta JSON —feed, ficha por narrativa y metadatos de salud— que el sitio
+consume. El **lens llama a sus fuentes desde el navegador**: DEX Screener,
+GeckoTerminal y DefiLlama responden con `Access-Control-Allow-Origin: *`
+(comprobado), así que ese bloque no necesita servidor.
+
+**Consecuencias.** Tres pérdidas reales, y ninguna se disimula en la interfaz:
+
+1. **No hay plano caliente.** Esto no es M2: es una versión del lens que vive en
+   el cliente. Sin servidor no hay singleflight compartido ni presupuesto de
+   latencia propagado, y cada visitante consume cuota de las APIs por su cuenta.
+2. **La frescura la marca el `cron` de Actions**, que se retrasa y a veces se
+   salta ejecuciones. Por eso cada pantalla declara su `generatedAt` y marca el
+   dato como viejo cuando lo es, en vez de aparentar tiempo real.
+3. **Los tenedores siguen fuera.** El RPC público de Solana devuelve 429 a la
+   primera llamada, así que ese bloque se renderiza como no disponible — que es
+   visualmente distinto de un cero y de un dato viejo.
+
+Se revisa cuando exista el plano caliente de M2 y haya dónde desplegarlo.
+
+---
+
+### ADR-016 — El fundamento se normaliza por los componentes presentes (v2)
+
+**Contexto.** El eje de fundamento sumaba los términos disponibles: TVL,
+comisiones y volumen, cada uno con su peso. Al dibujar la primera serie con
+historia real apareció un escalón entre el tramo reconstruido y el tramo vivo.
+
+**Diagnóstico.** El escalón no era un cambio del fundamento: era un cambio de
+**lo que estábamos midiendo**. Sumar los términos presentes hacía que una
+entidad con tres componentes puntuara por encima de otra idéntica con uno solo,
+y que una narrativa con más protocolos en el diccionario saliera por delante por
+tener más entradas. El artefacto del empalme era el síntoma visible de un sesgo
+que ya afectaba a la comparación entre narrativas.
+
+**Decisión.** Dos cambios, y `SCORE_VERSION` sube a `v2`:
+
+1. El valor por entidad es la **media ponderada de los componentes presentes**,
+   no su suma; y el valor de la narrativa es la media entre entidades.
+2. El backfill trae los **tres** componentes históricos —TVL, comisiones y
+   volumen diarios— para que la historia mida lo mismo que la corrida en vivo.
+
+**Consecuencias.** Un cero reportado y un campo ausente dejan de ser
+equivalentes, que es lo correcto: «cobró cero» es un dato y «no sabemos cuánto
+cobró» es un hueco. El backfill pasa de una llamada por protocolo a tres.
+A cambio, la pendiente vuelve a significar algo y los percentiles entre
+narrativas dejan de premiar la cobertura del diccionario.
+
+---
+
 ## 9. Deuda aceptada conscientemente
 
 Estas no son omisiones; son decisiones con fecha de revisión.

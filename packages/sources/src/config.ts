@@ -26,7 +26,7 @@ export const PROVIDERS: Readonly<Record<SourceId, ProviderConfig>> = {
   // Datos on-chain agregados y públicamente auditables contra la cadena.
   defillama: {
     baseUrl: 'https://api.llama.fi',
-    concurrency: 4,
+    concurrency: 8,
     // 53 protocolos + 2 agregados por corrida horaria = 55 llamadas/hora.
     // El techo deja margen para un barrido puntual sin acercarse a lo que
     // Cloudflare pueda considerar abuso.

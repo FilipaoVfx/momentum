@@ -15,7 +15,7 @@ prohíbe.
 
 | Fuente | Eje | Credencial | Estado | Llamadas/día |
 |---|---|---|---|---|
-| DefiLlama | Fundamento | No | Operativa | ~1.272 |
+| DefiLlama | Fundamento | No | Operativa | ~1.272 (+3/protocolo en el backfill) |
 | Polymarket | Atención (capital) | No | Operativa | 96 |
 | Reddit | Atención (social) | **Sí, OAuth** | Bloqueada sin credencial | ~1.056 |
 | DEX Screener | Liquidez (M2) | No | Verificada, sin integrar | — |
@@ -47,6 +47,22 @@ Cloudflare, así que el límite existe y solo se descubre chocando.
 deliberadamente conservador). Cadencia horaria: son magnitudes de 24 h y la
 ventana de agregación también es de 24 h, así que pedirlas cada 15 minutos era
 gastar cuota en recibir el mismo número. Bajó de 5.088 a ~1.272 llamadas diarias.
+
+**Historia (solo backfill):** `/protocol/{slug}` para TVL,
+`/summary/fees/{slug}?dataType=dailyFees` para comisiones y
+`/summary/dexs/{slug}` para volumen. **Medido:** 2.088, 1.955 y 1.480 puntos
+diarios respectivamente para los protocolos de referencia. Se piden los tres
+porque una historia de solo TVL empalmada con una serie viva de tres componentes
+fabrica un escalón que parece un cambio de fundamento sin serlo (ADR-016).
+
+**Artefacto conocido del arranque en frío.** El primer punto vivo tras un
+backfill se calcula sin los agregados de comisiones y volumen —todavía no se han
+capturado— y por tanto con una **base distinta** a la del resto de la serie: sale
+más bajo y parece una caída del fundamento que no ocurrió. Se corrige solo en la
+siguiente corrida y en régimen normal no aparece, porque la cadencia horaria
+garantiza un agregado dentro de la ventana de 48 h. La solución de fondo
+—registrar la base de cada punto y comparar solo puntos homogéneos— está
+pendiente y no se ha hecho.
 
 **Ausencias conocidas:** `helium-network` y `render-network-bme` responden
 **vacío** con HTTP 200 — DefiLlama no publica TVL para ellos. Se declara como

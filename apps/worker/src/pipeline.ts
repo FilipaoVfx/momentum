@@ -1,10 +1,11 @@
 import type { CollectionGap, MetricPoint } from '@momentum/core';
 import {
+  AXIS_WINDOW,
   SCORE_VERSION,
-  WINDOWS,
   classifyQuadrant,
   computeAttention,
   computeFundamental,
+  windowSpec,
 } from '@momentum/core';
 import {
   insertFundamentals,
@@ -22,8 +23,9 @@ import {
 import { deriveAll } from './derive.ts';
 import type { DictionaryIndex } from './dictionary.ts';
 
-/** Ventana con la que se construye la serie que alimenta el cuadrante. */
-export const SERIES_WINDOW = WINDOWS.find((w) => w.window === '24h')!;
+/** Una ventana por eje: las fuentes de cada uno no publican al mismo ritmo. */
+export const ATTENTION_WINDOW = windowSpec(AXIS_WINDOW.attention);
+export const FUNDAMENTAL_WINDOW = windowSpec(AXIS_WINDOW.fundamental);
 /** Horizonte sobre el que se mide la pendiente (FR-011: derivada, no nivel). */
 export const SLOPE_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -81,16 +83,22 @@ export async function processBatch(input: {
 
   // La ventana se lee de la base, no del lote: la serie de las últimas 24 h
   // incluye lo que trajeron las corridas anteriores, que es justo el punto.
-  const windowStart = new Date(windowEnd.getTime() - SERIES_WINDOW.durationMs);
+  const attentionStart = new Date(windowEnd.getTime() - ATTENTION_WINDOW.durationMs);
+  const fundamentalStart = new Date(windowEnd.getTime() - FUNDAMENTAL_WINDOW.durationMs);
   const [mentions, fundamentals] = await Promise.all([
-    listMentions(db, { since: windowStart, until: windowEnd }),
-    listFundamentals(db, { since: windowStart, until: windowEnd }),
+    listMentions(db, { since: attentionStart, until: windowEnd }),
+    listFundamentals(db, { since: fundamentalStart, until: windowEnd }),
   ]);
 
   const points: MetricPoint[] = [];
   for (const narrative of narratives) {
-    const attention = computeAttention(narrative.slug, mentions, windowEnd, SERIES_WINDOW);
-    const fundamental = computeFundamental(narrative.slug, fundamentals, windowEnd, SERIES_WINDOW);
+    const attention = computeAttention(narrative.slug, mentions, windowEnd, ATTENTION_WINDOW);
+    const fundamental = computeFundamental(
+      narrative.slug,
+      fundamentals,
+      windowEnd,
+      FUNDAMENTAL_WINDOW,
+    );
     if (attention) points.push(attention);
     if (fundamental) points.push(fundamental);
 
@@ -99,9 +107,9 @@ export async function processBatch(input: {
       gaps.push({
         source: 'reddit',
         reason: 'window_not_covered',
-        detail: `sin menciones para ${narrative.slug} en la ventana de ${SERIES_WINDOW.window}`,
+        detail: `sin menciones para ${narrative.slug} en la ventana de ${ATTENTION_WINDOW.window}`,
         narrativeSlug: narrative.slug,
-        windowStart,
+        windowStart: attentionStart,
         windowEnd,
       });
     }
@@ -109,9 +117,9 @@ export async function processBatch(input: {
       gaps.push({
         source: 'defillama',
         reason: 'window_not_covered',
-        detail: `sin fundamento para ${narrative.slug} en la ventana de ${SERIES_WINDOW.window}`,
+        detail: `sin fundamento para ${narrative.slug} en la ventana de ${FUNDAMENTAL_WINDOW.window}`,
         narrativeSlug: narrative.slug,
-        windowStart,
+        windowStart: fundamentalStart,
         windowEnd,
       });
     }
@@ -146,17 +154,25 @@ async function classifyAll(input: {
   const result: Record<string, QuadrantOutcome> = {};
 
   for (const narrative of narratives) {
-    const series = await listMetricPoints(db, {
-      narrativeId: narrative.id,
-      window: SERIES_WINDOW.window,
-      scoreVersion,
-      since,
-      until: windowEnd,
-    });
-    const verdict = classifyQuadrant(
-      series.filter((p) => p.axis === 'attention'),
-      series.filter((p) => p.axis === 'fundamental'),
-    );
+    const [attention, fundamental] = await Promise.all([
+      listMetricPoints(db, {
+        narrativeId: narrative.id,
+        axis: 'attention',
+        window: ATTENTION_WINDOW.window,
+        scoreVersion,
+        since,
+        until: windowEnd,
+      }),
+      listMetricPoints(db, {
+        narrativeId: narrative.id,
+        axis: 'fundamental',
+        window: FUNDAMENTAL_WINDOW.window,
+        scoreVersion,
+        since,
+        until: windowEnd,
+      }),
+    ]);
+    const verdict = classifyQuadrant(attention, fundamental);
 
     if (verdict.kind === 'insufficient_data') {
       // No se abre estado: "muerta" significa que miramos y no se movió, no

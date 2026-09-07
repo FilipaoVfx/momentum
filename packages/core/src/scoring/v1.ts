@@ -8,7 +8,7 @@ import type {
 } from '../types.ts';
 
 /** Toda fila producida por este pipeline la lleva (FR-051, M§9). */
-export const SCORE_VERSION = 'v1';
+export const SCORE_VERSION = 'v2';
 
 /**
  * Ponderación por costo de fabricación (M§5, FR-031).
@@ -88,8 +88,27 @@ export interface WindowSpec {
 export const WINDOWS: readonly WindowSpec[] = [
   { window: '1h', durationMs: 60 * 60 * 1000 },
   { window: '24h', durationMs: 24 * 60 * 60 * 1000 },
+  { window: '48h', durationMs: 48 * 60 * 60 * 1000 },
   { window: '7d', durationMs: 7 * 24 * 60 * 60 * 1000 },
 ];
+
+/**
+ * Ventana por eje. No son iguales porque las fuentes no publican igual.
+ *
+ * La atención ocurre en horas y se mide en 24 h. El fundamento son agregados
+ * diarios que DefiLlama publica con retraso variable: con 24 h, un día entraban
+ * TVL y comisiones y al siguiente solo TVL, así que **la base del compuesto
+ * cambiaba** y la serie salía en diente de sierra. El salto no era el
+ * fundamento moviéndose: era el compuesto midiendo otra cosa. Con 48 h la cifra
+ * diaria más reciente de cada componente siempre está dentro.
+ */
+export const AXIS_WINDOW: Readonly<Record<Axis, WindowLabel>> = {
+  attention: '24h',
+  fundamental: '48h',
+};
+
+export const windowSpec = (label: WindowLabel): WindowSpec =>
+  WINDOWS.find((w) => w.window === label)!;
 
 /**
  * Atención de una narrativa en una ventana.
@@ -182,13 +201,43 @@ export function computeFundamental(
   }
   if (latest.size === 0) return null;
 
-  let total = 0;
+  // Se suman los dólares de cada componente entre las entidades de la narrativa
+  // y **después** se toma el logaritmo; luego se combinan los componentes.
+  //
+  // El orden importa y costó dos intentos verlo. Promediar logaritmos entre
+  // entidades era inestable: las comisiones de Lido y las de Marinade se
+  // diferencian en órdenes de magnitud, así que el día que una de las pequeñas
+  // no publicaba, la media saltaba varios puntos y la serie salía en diente de
+  // sierra. El movimiento no era del fundamento: era del reparto de cobertura.
+  //
+  // Sumar primero es además lo que significa la magnitud: el fundamento de una
+  // narrativa son las comisiones que cobran sus protocolos, no el promedio de
+  // sus logaritmos. Que aparezca un protocolo pequeño mueve el total poco,
+  // porque contribuye poco — que es exactamente lo que debe pasar.
+  const perField = new Map<FieldName, number>();
   const snapshotIds = new Set<string>();
   for (const [key, entry] of latest) {
     const field = key.split('\u0000')[1] as FieldName;
-    total += FUNDAMENTAL_WEIGHTS[field] * scale(entry.value);
+    perField.set(field, (perField.get(field) ?? 0) + entry.value);
     snapshotIds.add(entry.snapshotId);
   }
+
+  // Un compuesto hecho solo de TVL no es comparable con uno que además incluye
+  // flujos, y mezclarlos en una serie fabrica escalones que se leen como caídas
+  // del fundamento sin serlo. Además el TVL es el componente más fácil de
+  // inflar haciendo circular capital propio en bucle (M§22): sin una señal de
+  // flujo al lado, preferimos declarar la brecha a publicar un número que
+  // parece decir algo.
+  const hasFlow = perField.has('fees24hUsd') || perField.has('volume24hUsd');
+  if (!hasFlow) return null;
+
+  let weighted = 0;
+  let weight = 0;
+  for (const [field, sum] of perField) {
+    weighted += FUNDAMENTAL_WEIGHTS[field] * scale(sum);
+    weight += FUNDAMENTAL_WEIGHTS[field];
+  }
+  const total = weighted / weight;
 
   return {
     narrativeSlug,

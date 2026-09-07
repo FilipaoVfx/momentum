@@ -1,5 +1,6 @@
 import { createPool, listGaps } from '@momentum/db';
 import { DictionaryIndex, loadDictionary } from '../dictionary.ts';
+import { backfill } from '../backfill.ts';
 import { ingestOnce } from '../ingest.ts';
 import { evaluateOutcomes } from '../outcomes.ts';
 import { replay } from '../replay.ts';
@@ -58,11 +59,25 @@ try {
       `Replay ${result.runId}: ${result.batches.length} corridas reconstruidas, ` +
         `${points} puntos de serie, 0 llamadas externas.`,
     );
+  } else if (command === 'backfill') {
+    const index = new DictionaryIndex(await loadDictionary());
+    const days = Number(args.get('days') ?? '14');
+    const result = await backfill({ db, index, days });
+    console.log(
+      `Backfill ${result.runId}: ${result.history.observations} observaciones, ` +
+        `${result.history.pointsWritten} puntos en ${result.history.days} días.`,
+    );
+    console.log(
+      'El eje de atención no se rellena: las fuentes sociales no publican ' +
+        'historia. Se declara como brecha.',
+    );
   } else if (command === 'outcomes') {
     const result = await evaluateOutcomes({ db });
     console.log(`Corrida ${result.runId}: ${result.written} outcomes evaluados.`);
   } else {
-    console.error('Uso: run [once|replay --from=-14d [--score-version=v1]|outcomes]');
+    console.error(
+      'Uso: run [once|replay --from=-14d [--score-version=v1]|backfill --days=14|outcomes]',
+    );
     process.exitCode = 1;
   }
 } finally {

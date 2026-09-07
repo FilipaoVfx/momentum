@@ -7,7 +7,7 @@ import {
   statesDueForOutcome,
   type Db,
 } from '@momentum/db';
-import { SERIES_WINDOW } from './pipeline.ts';
+import { ATTENTION_WINDOW, FUNDAMENTAL_WINDOW } from './pipeline.ts';
 
 export const HORIZONS = [7, 14, 30] as const;
 
@@ -41,14 +41,14 @@ export async function evaluateOutcomes(deps: {
         const target = new Date(at.getTime() + horizonDays * 86_400_000);
         const series = await listMetricPoints(db, {
           narrativeId: state.narrativeId,
-          window: SERIES_WINDOW.window,
           scoreVersion: state.scoreVersion,
           since: new Date(at.getTime() - NEAREST_TOLERANCE_MS),
           until: new Date(target.getTime() + NEAREST_TOLERANCE_MS),
         });
 
         const change = (axis: 'attention' | 'fundamental'): number | null => {
-          const points = series.filter((p) => p.axis === axis);
+          const window = axis === 'attention' ? ATTENTION_WINDOW.window : FUNDAMENTAL_WINDOW.window;
+          const points = series.filter((p) => p.axis === axis && p.window === window);
           const start = nearest(points, at);
           const end = nearest(points, target);
           return start && end && start !== end ? end.value - start.value : null;

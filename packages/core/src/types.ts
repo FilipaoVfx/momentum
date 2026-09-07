@@ -7,7 +7,7 @@
 export type Axis = 'attention' | 'fundamental';
 
 /** Ventana de agregación de una serie. */
-export type WindowLabel = '1h' | '24h' | '7d';
+export type WindowLabel = '1h' | '24h' | '48h' | '7d';
 
 /** Cuadrante (SRS FR-021). Los nombres del README en su forma de identificador. */
 export type Quadrant =

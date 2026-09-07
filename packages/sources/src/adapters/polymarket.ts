@@ -14,13 +14,25 @@ import type { FetchedSnapshot, SourceGateway } from '../gateway.ts';
 
 export const requestKeys = { topMarkets: () => 'polymarket:markets:top' } as const;
 
+/**
+ * Etiqueta «Crypto» del catálogo de Polymarket.
+ *
+ * Sin este filtro pedíamos los mercados de mayor volumen del sitio entero, y
+ * medido en una corrida real eso devolvía cien mercados de política europea y
+ * cero señal para nuestras narrativas. El volumen global no es nuestro
+ * universo; el de cripto sí.
+ */
+export const CRYPTO_TAG_ID = 21;
+
 export function fetchTopMarkets(
   gateway: SourceGateway,
   limit = 200,
 ): Promise<SourceResult<FetchedSnapshot>> {
   return gateway.get({
     source: 'polymarket',
-    path: `/markets?active=true&closed=false&order=volume24hr&ascending=false&limit=${limit}`,
+    path:
+      `/markets?active=true&closed=false&order=volume24hr&ascending=false` +
+      `&limit=${limit}&tag_id=${CRYPTO_TAG_ID}`,
     requestKey: requestKeys.topMarkets(),
   });
 }

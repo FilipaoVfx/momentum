@@ -1,0 +1,83 @@
+name: Sitio
+
+# Genera el material estático del plano frío y lo publica en GitHub Pages.
+#
+# El `cron` de GitHub Actions no es puntual: se retrasa y a veces se salta
+# ejecuciones. El sitio no lo disimula — cada pantalla declara su `generatedAt`
+# y marca el dato como viejo cuando lo es.
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Recargar 14 días de histórico de fundamento (caro: ~2 MB por protocolo)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: sitio
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DB_SCHEMA: momentum
+      REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+      REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+      REDDIT_USER_AGENT: 'momentum/0.1 (cold-plane ingest)'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Esquema al día
+        run: pnpm migrate up
+
+      - name: Diccionario curado → base
+        run: pnpm dict:sync
+
+      - name: Histórico de fundamento
+        if: inputs.backfill
+        run: pnpm worker:backfill --days=14
+
+      # Una corrida del plano frío. Nunca falla la publicación por una fuente
+      # caída: la degradación parcial es el comportamiento correcto y la brecha
+      # viaja al sitio.
+      - name: Corrida del plano frío
+        run: pnpm worker:once
+        continue-on-error: true
+
+      - name: Evaluar outcomes
+        run: pnpm worker:outcomes
+        continue-on-error: true
+
+      - name: Exportar material estático
+        run: pnpm export apps/web/public/data
+
+      - name: Construir el sitio
+        run: pnpm --filter @momentum/web build
+        env:
+          SITE_BASE: /momentum/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+      - id: deploy
+        uses: actions/deploy-pages@v4

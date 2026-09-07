@@ -66,3 +66,17 @@ describe('Polymarket', () => {
     expect(polymarket.parseMarkets({ error: 'down' })).toEqual([]);
   });
 });
+
+describe('universo de Polymarket', () => {
+  it('pide los mercados de cripto, no los de mayor volumen del sitio', async () => {
+    const calls: string[] = [];
+    const gateway = {
+      get: async (opts: { path: string }) => {
+        calls.push(opts.path);
+        return { ok: true as const, value: {} as never };
+      },
+    };
+    await polymarket.fetchTopMarkets(gateway as never);
+    expect(calls[0]).toContain(`tag_id=${polymarket.CRYPTO_TAG_ID}`);
+  });
+});

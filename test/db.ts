@@ -1,4 +1,4 @@
-import { createPool, migrateUp, type Db } from '../packages/db/src/index.ts';
+import { createPool, ensureSchema, migrateUp, type Db } from '../packages/db/src/index.ts';
 
 export const TEST_DATABASE_URL =
   process.env['TEST_DATABASE_URL'] ?? 'postgres://momentum:momentum@localhost:5432/momentum_test';
@@ -12,6 +12,7 @@ export const TEST_DATABASE_URL =
  */
 export async function testDb(): Promise<Db> {
   const db = createPool(TEST_DATABASE_URL);
+  await ensureSchema(db);
   await migrateUp(db);
   return db;
 }

@@ -59,6 +59,29 @@ vuelta a sus principios con marcas `[M§n]`.
 
 ---
 
+## Ver el MVP
+
+**https://filipaovfx.github.io/momentum/**
+
+Tres pantallas, dos flujos cerrados:
+
+- **Narrativas** — las 15 narrativas colocadas en el cuadrante real de dos ejes.
+  Las que no tienen datos suficientes aparecen aparte y declaradas, nunca como
+  «muertas».
+- **Narrativa** — las dos series en el tiempo (dos gráficos, nunca dos ejes en
+  uno), el histórico de cuadrantes, la distancia entre orígenes y menciones, y la
+  brecha de recolección de la última corrida.
+- **Lens** — pegas un contrato y los bloques se pintan según llegan. Las llamadas
+  salen **del navegador**: DEX Screener y GeckoTerminal responden con CORS
+  abierto, así que este flujo no necesita servidor. La distribución de tenedores
+  aparece como no disponible, porque lo es.
+
+El sitio es estático y se regenera por tarea programada, así que declara cuándo
+se generó y marca el dato como viejo cuando lo es. Detalle en
+[`docs/ARD.md`](docs/ARD.md), ADR-015.
+
+---
+
 ## Estado
 
 **M0 y M1 implementados.** Hitos en [`docs/PRD.md`](docs/PRD.md) §10.
@@ -83,8 +106,11 @@ cp .env.example .env                   # y rellenar DATABASE_URL
 pnpm install
 pnpm migrate up                        # esquema
 pnpm dict:sync                         # 15 narrativas curadas → base
+pnpm worker:backfill --days=14         # historia real de fundamento
 pnpm worker:once                       # una corrida contra las fuentes reales
-pnpm test                              # 111 pruebas, ninguna depende de la red
+pnpm export apps/web/public/data       # JSON que consume el sitio
+pnpm --filter @momentum/web dev        # el sitio en local
+pnpm test                              # 121 pruebas, ninguna depende de la red
 ```
 
 `pnpm worker:replay --from=-14d` recalcula la historia leyendo solo

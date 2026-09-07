@@ -14,7 +14,9 @@
     "dict:sync": "tsx apps/worker/src/cli/dict-sync.ts",
     "worker:once": "tsx apps/worker/src/cli/run.ts once",
     "worker:replay": "tsx apps/worker/src/cli/run.ts replay",
+    "worker:backfill": "tsx apps/worker/src/cli/run.ts backfill",
     "worker:outcomes": "tsx apps/worker/src/cli/run.ts outcomes",
+    "export": "tsx apps/exporter/src/cli.ts",
     "worker:serve": "tsx apps/worker/src/main.ts",
     "api:dev": "tsx apps/api/src/main.ts"
   },
@@ -23,6 +25,7 @@
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "eslint": "^9.17.0",
+    "playwright": "^1.63.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",

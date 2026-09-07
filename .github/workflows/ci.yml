@@ -32,6 +32,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm --filter @momentum/web build
       - run: pnpm lint
       # Las pruebas de red corren contra una red falsa: la suite no depende de
       # que DefiLlama, Reddit o Polymarket estén en pie hoy.

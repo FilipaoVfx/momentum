@@ -1,4 +1,4 @@
-import { createPool } from './pool.ts';
+import { createPool, ensureSchema } from './pool.ts';
 import { appliedMigrations, migrateDown, migrateUp } from './migrate.ts';
 
 const command = process.argv[2] ?? 'up';
@@ -6,6 +6,7 @@ const db = createPool();
 
 try {
   if (command === 'up') {
+    console.log(`Esquema: ${await ensureSchema(db)}`);
     const applied = await migrateUp(db);
     console.log(applied.length ? `Aplicadas: ${applied.join(', ')}` : 'Sin migraciones pendientes.');
   } else if (command === 'down') {

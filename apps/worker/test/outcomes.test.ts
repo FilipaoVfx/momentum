@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { AXIS_WINDOW, SCORE_VERSION } from '@momentum/core';
 import { hitRateByQuadrant, upsertNarrative, withTransaction, type Db } from '@momentum/db';
 import { testDb, truncateAll } from '../../../test/db.ts';
 import { evaluateOutcomes } from '../src/outcomes.ts';
@@ -38,8 +39,8 @@ async function seed(input: {
   const { rows } = await db.query(
     `insert into quadrant_state
        (narrative_id, quadrant, attention_slope, fundamental_slope, score_version, started_at)
-     values ($1, $2, 0, 0.1, 'v1', $3) returning id`,
-    [narrativeId, input.quadrant, startedAt],
+     values ($1, $2, 0, 0.1, $4, $3) returning id`,
+    [narrativeId, input.quadrant, startedAt, SCORE_VERSION],
   );
 
   for (const [at, fundamental] of [
@@ -53,8 +54,8 @@ async function seed(input: {
       await db.query(
         `insert into metric_point
            (narrative_id, axis, window_label, observed_at, value, score_version, input_snapshot_ids)
-         values ($1, $2, '24h', $3, $4, 'v1', array[gen_random_uuid()])`,
-        [narrativeId, axis, at, value],
+         values ($1, $2, $5, $3, $4, $6, array[gen_random_uuid()])`,
+        [narrativeId, axis, at, value, AXIS_WINDOW[axis], SCORE_VERSION],
       );
     }
   }
@@ -93,8 +94,8 @@ describe('tabla de outcomes (M§14, FR-050)', () => {
     await db.query(
       `insert into quadrant_state
          (narrative_id, quadrant, attention_slope, fundamental_slope, score_version, started_at)
-       values ($1, 'confirmed', 0.5, 0.5, 'v1', $2)`,
-      [narrativeId, daysBefore(40)],
+       values ($1, 'confirmed', 0.5, 0.5, $3, $2)`,
+      [narrativeId, daysBefore(40), SCORE_VERSION],
     );
 
     await evaluateOutcomes({ db, now: NOW });
@@ -125,7 +126,7 @@ describe('tabla de outcomes (M§14, FR-050)', () => {
       horizonDays: 30,
     });
     await evaluateOutcomes({ db, now: NOW });
-    const rates = await hitRateByQuadrant(db, 30, 'v1');
+    const rates = await hitRateByQuadrant(db, 30, SCORE_VERSION);
     expect(rates).toEqual([{ quadrant: 'quiet_build', evaluated: 1, confirmed: 1 }]);
   });
 });
