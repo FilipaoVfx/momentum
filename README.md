@@ -60,11 +60,44 @@ vuelta a sus principios con marcas `[M§n]`.
 
 ## Estado
 
-MVP en definición. Ningún código todavía.
+**M0 y M1 implementados.** Hitos en [`docs/PRD.md`](docs/PRD.md) §10.
 
-Hitos en [`docs/PRD.md`](docs/PRD.md) §10. El siguiente es **M0 — Esqueleto**:
-store, esquema e ingesta de dos fuentes, con criterio de salida en un snapshot
-completo persistido con procedencia.
+| Hito | Estado | Criterio de salida |
+|---|---|---|
+| M0 — Esqueleto | Hecho | Snapshot completo persistido con procedencia |
+| M1 — Plano frío | Hecho | Serie de 14 días reconstruible desde crudos |
+| M2 — Lens | Pendiente | p95 < 3 s con 4 fuentes bajo carga sintética |
+
+Lo que hay hoy: worker del plano frío con ingesta cada 15 minutos, series de
+atención y fundamento por narrativa, clasificación de cuadrante con su
+histórico, deduplicación por origen, tabla de outcomes y reconstrucción completa
+de la historia desde los snapshots crudos sin tocar la red. `apps/api` existe
+pero solo expone `/health`: el lens llega en M2.
+
+### Arrancar en local
+
+```bash
+docker compose up -d postgres          # o un Postgres 16 propio
+cp .env.example .env                   # y rellenar DATABASE_URL
+pnpm install
+pnpm migrate up                        # esquema
+pnpm dict:sync                         # 15 narrativas curadas → base
+pnpm worker:once                       # una corrida contra las fuentes reales
+pnpm test                              # 84 pruebas, ninguna depende de la red
+```
+
+`pnpm worker:replay --from=-14d` recalcula la historia leyendo solo
+`source_snapshot`: cero llamadas externas. Es el criterio de salida de M1 y, con
+`--score-version=`, el modo sombra para evaluar una fórmula nueva contra el
+pasado.
+
+### Fuentes
+
+| Fuente | Eje | Estado |
+|---|---|---|
+| DefiLlama | Fundamento | Operativa, sin credenciales |
+| Polymarket | Atención (capital en riesgo) | Operativa, sin credenciales |
+| Reddit | Atención (social) | Requiere `REDDIT_CLIENT_ID`/`SECRET`; sin ellas la corrida declara la brecha y sigue |
 
 ---
 

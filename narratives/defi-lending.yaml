@@ -1,0 +1,7 @@
+slug: defi-lending
+name: Préstamo DeFi
+entities:
+  defillama: [aave-v3, compound-v3, morpho-blue, maple, jupiter-lend]
+  subreddits: [defi]
+  polymarket_tags: [aave, defi]
+  tickers: [AAVE, COMP, MORPHO, SYRUP]

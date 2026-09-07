@@ -1,0 +1,7 @@
+slug: prediction-markets
+name: Mercados de predicción
+entities:
+  defillama: [polymarket-international, polymarket-us]
+  subreddits: [predictionmarkets]
+  polymarket_tags: [election, prediction]
+  tickers: []

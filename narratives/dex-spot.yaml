@@ -1,0 +1,7 @@
+slug: dex-spot
+name: DEX al contado
+entities:
+  defillama: [uniswap-v4, uniswap-v3, curve-dex, hyperliquid-spot-orderbook]
+  subreddits: [uniswap, defi]
+  polymarket_tags: [uniswap]
+  tickers: [UNI, CRV]

@@ -1,0 +1,7 @@
+slug: memecoins-solana
+name: Memecoins en Solana
+entities:
+  defillama: [pumpswap, raydium-amm]
+  subreddits: [solana, cryptomoonshots]
+  polymarket_tags: [memecoin, dogecoin]
+  tickers: [BONK, WIF, PUMP]

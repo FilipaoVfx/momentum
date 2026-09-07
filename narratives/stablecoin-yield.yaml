@@ -1,0 +1,7 @@
+slug: stablecoin-yield
+name: Rendimiento de stablecoins
+entities:
+  defillama: [ethena-usde, sky-lending, ethena-usdtb, pendle-v2]
+  subreddits: [defi]
+  polymarket_tags: [stablecoin, usde, tether]
+  tickers: [ENA, SKY, PENDLE]

@@ -1,0 +1,7 @@
+slug: liquid-restaking
+name: Liquid restaking
+entities:
+  defillama: [ether.fi-stake, kelp, renzo, eigencloud, jito-restaking]
+  subreddits: [ethfinance]
+  polymarket_tags: [restaking, eigenlayer]
+  tickers: [ETHFI, EIGEN, REZ]

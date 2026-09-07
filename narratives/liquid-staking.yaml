@@ -1,0 +1,7 @@
+slug: liquid-staking
+name: Liquid staking
+entities:
+  defillama: [lido, rocket-pool, jito-liquid-staking, marinade-liquid-staking, jupiter-staked-sol]
+  subreddits: [ethstaker, ethfinance]
+  polymarket_tags: [ethereum, staking]
+  tickers: [LDO, RPL, JTO]
